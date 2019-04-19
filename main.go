@@ -8,7 +8,6 @@ import (
 	"github.com/iikira/BaiduPCS-Go/internal/pcsconfig"
 	_ "github.com/iikira/BaiduPCS-Go/internal/pcsinit"
 	"github.com/iikira/BaiduPCS-Go/internal/pcsupdate"
-	"github.com/iikira/BaiduPCS-Go/internal/pcsweb"
 	"github.com/iikira/BaiduPCS-Go/pcsliner"
 	"github.com/iikira/BaiduPCS-Go/pcsliner/args"
 	"github.com/iikira/BaiduPCS-Go/pcstable"
@@ -32,6 +31,11 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+)
+
+const (
+	// NameShortDisplayNum 文件名缩略显示长度
+	NameShortDisplayNum = 16
 )
 
 var (
@@ -186,9 +190,16 @@ func main() {
 			}
 
 			var (
-				activeUser = pcsconfig.Config.ActiveUser()
-				pcs        = pcsconfig.Config.ActiveUserBaiduPCS()
-				runeFunc   = unicode.IsSpace
+				activeUser  = pcsconfig.Config.ActiveUser()
+				pcs         = pcsconfig.Config.ActiveUserBaiduPCS()
+				runeFunc    = unicode.IsSpace
+				pcsRuneFunc = func(r rune) bool {
+					switch r {
+					case '\'', '"':
+						return true
+					}
+					return unicode.IsSpace(r)
+				}
 				targetPath string
 			)
 
@@ -242,18 +253,18 @@ func main() {
 				if !closed {
 					if !strings.HasPrefix(file.Path, path.Clean(path.Join(targetDir, path.Base(targetPath)))) {
 						if path.Base(targetDir) == path.Base(targetPath) {
-							appendLine = strings.Join(append(lineArgs[:numArgs-1], escaper.EscapeByRuneFunc(path.Join(targetPath, file.Filename), runeFunc)), " ")
+							appendLine = strings.Join(append(lineArgs[:numArgs-1], escaper.EscapeByRuneFunc(path.Join(targetPath, file.Filename), pcsRuneFunc)), " ")
 							goto handle
 						}
 						// fmt.Println(file.Path, targetDir, targetPath)
 						continue
 					}
 					// fmt.Println(path.Clean(path.Join(path.Dir(targetPath), file.Filename)), targetPath, file.Filename)
-					appendLine = strings.Join(append(lineArgs[:numArgs-1], escaper.EscapeByRuneFunc(path.Clean(path.Join(path.Dir(targetPath), file.Filename)), runeFunc)), " ")
+					appendLine = strings.Join(append(lineArgs[:numArgs-1], escaper.EscapeByRuneFunc(path.Clean(path.Join(path.Dir(targetPath), file.Filename)), pcsRuneFunc)), " ")
 					goto handle
 				}
 				// 没有的情况
-				appendLine = strings.Join(append(lineArgs, escaper.EscapeByRuneFunc(file.Filename, runeFunc)), " ")
+				appendLine = strings.Join(append(lineArgs, escaper.EscapeByRuneFunc(file.Filename, pcsRuneFunc)), " ")
 				goto handle
 
 			handle:
@@ -281,7 +292,7 @@ func main() {
 			if activeUser.Name != "" {
 				// 格式: BaiduPCS-Go:<工作目录> <百度ID>$
 				// 工作目录太长时, 会自动缩略
-				prompt = app.Name + ":" + converter.ShortDisplay(path.Base(activeUser.Workdir), 16) + " " + activeUser.Name + "$ "
+				prompt = app.Name + ":" + converter.ShortDisplay(path.Base(activeUser.Workdir), NameShortDisplayNum) + " " + activeUser.Name + "$ "
 			} else {
 				// BaiduPCS-Go >
 				prompt = app.Name + " > "
@@ -317,24 +328,6 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
-		{
-			Name:     "web",
-			Usage:    "启用 web 客户端 (测试中)",
-			Category: "其他",
-			Before:   reloadFn,
-			Action: func(c *cli.Context) error {
-				fmt.Printf("web 客户端功能为实验性功能, 测试中, 打开 http://localhost:%d 查看效果\n", c.Uint("port"))
-				fmt.Println(pcsweb.StartServer(c.Uint("port")))
-				return nil
-			},
-			Flags: []cli.Flag{
-				cli.UintFlag{
-					Name:  "port",
-					Usage: "自定义端口",
-					Value: 8080,
-				},
-			},
-		},
 		{
 			Name:     "run",
 			Usage:    "执行系统命令",
